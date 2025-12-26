@@ -1,0 +1,6 @@
+version: 1
+domain: ci4.local.test
+type: php
+php: "84"
+path: projects/ci4-app
+docroot: public

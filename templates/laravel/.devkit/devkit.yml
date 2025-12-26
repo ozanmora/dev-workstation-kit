@@ -1,0 +1,6 @@
+version: 1
+domain: laravel.local.test
+type: php
+php: "84"
+path: projects/laravel-app
+docroot: public

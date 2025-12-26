@@ -1,0 +1,155 @@
+services:
+  traefik:
+    image: traefik:v3.1
+    container_name: ${COMPOSE_PROJECT_NAME}-traefik
+    ports:
+      - "${HTTP_PORT}:80"
+      - "${HTTPS_PORT}:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./docker/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./docker/traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+      - ./docker/certs:/certs:ro
+    networks: [devnet]
+    labels:
+      - "traefik.enable=true"
+      # Redirect HTTP -> HTTPS
+      - "traefik.http.routers.http-catchall.entrypoints=web"
+      - "traefik.http.routers.http-catchall.rule=HostRegexp(`{host:.+}`)"
+      - "traefik.http.routers.http-catchall.middlewares=redirect-to-https@file"
+
+      # Optional dashboard (only when TRAEFIK_ENABLE_DASHBOARD=true)
+      - "traefik.http.routers.traefik.rule=Host(`${TRAEFIK_DASHBOARD_DOMAIN}`)"
+      - "traefik.http.routers.traefik.entrypoints=websecure"
+      - "traefik.http.routers.traefik.tls=true"
+      - "traefik.http.routers.traefik.service=api@internal"
+      - "traefik.http.routers.traefik.middlewares=dashboard-enabled@file"
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: ${COMPOSE_PROJECT_NAME}-nginx
+    depends_on:
+      - php74
+      - php82
+      - php84
+      - php85
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./projects:/var/www/projects:ro
+    networks: [devnet]
+    labels:
+      - "traefik.enable=true"
+      # Catch-all for project domains (edit if you change BASE_DOMAIN)
+      - "traefik.http.routers.projects.rule=HostRegexp(`{subdomain:[a-z0-9-]+}.local.test`) || Host(`local.test`)"
+      - "traefik.http.routers.projects.entrypoints=websecure"
+      - "traefik.http.routers.projects.tls=true"
+      - "traefik.http.services.projects.loadbalancer.server.port=80"
+
+  php74:
+    build:
+      context: ./docker/php
+      dockerfile: Dockerfile
+      args: { PHP_VERSION: "7.4" }
+    container_name: ${COMPOSE_PROJECT_NAME}-php74
+    volumes:
+      - ./projects:/var/www/projects
+    environment: [TZ=Europe/Istanbul]
+    networks: [devnet]
+
+  php82:
+    build:
+      context: ./docker/php
+      dockerfile: Dockerfile
+      args: { PHP_VERSION: "8.2" }
+    container_name: ${COMPOSE_PROJECT_NAME}-php82
+    volumes:
+      - ./projects:/var/www/projects
+    environment: [TZ=Europe/Istanbul]
+    networks: [devnet]
+
+  php84:
+    build:
+      context: ./docker/php
+      dockerfile: Dockerfile
+      args: { PHP_VERSION: "8.4" }
+    container_name: ${COMPOSE_PROJECT_NAME}-php84
+    volumes:
+      - ./projects:/var/www/projects
+    environment: [TZ=Europe/Istanbul]
+    networks: [devnet]
+
+  php85:
+    build:
+      context: ./docker/php
+      dockerfile: Dockerfile
+      args: { PHP_VERSION: "8.5" }
+    container_name: ${COMPOSE_PROJECT_NAME}-php85
+    volumes:
+      - ./projects:/var/www/projects
+    environment: [TZ=Europe/Istanbul]
+    networks: [devnet]
+
+  mariadb:
+    image: mariadb:11.4
+    container_name: ${COMPOSE_PROJECT_NAME}-mariadb
+    environment:
+      - MARIADB_DATABASE=${DB_DATABASE}
+      - MARIADB_USER=${DB_USERNAME}
+      - MARIADB_PASSWORD=${DB_PASSWORD}
+      - MARIADB_ROOT_PASSWORD=${DB_ROOT_PASSWORD}
+      - TZ=Europe/Istanbul
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./data/mariadb:/var/lib/mysql
+    networks: [devnet]
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: ${COMPOSE_PROJECT_NAME}-redis
+    ports: ["${REDIS_PORT}:6379"]
+    networks: [devnet]
+
+  memcached:
+    image: memcached:1.6-alpine
+    container_name: ${COMPOSE_PROJECT_NAME}-memcached
+    ports: ["${MEMCACHED_PORT}:11211"]
+    networks: [devnet]
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: ${COMPOSE_PROJECT_NAME}-mailpit
+    networks: [devnet]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.mailpit.rule=Host(`${MAILPIT_DOMAIN}`)"
+      - "traefik.http.routers.mailpit.entrypoints=websecure"
+      - "traefik.http.routers.mailpit.tls=true"
+      - "traefik.http.services.mailpit.loadbalancer.server.port=8025"
+
+  adminer:
+    image: adminer:4
+    container_name: ${COMPOSE_PROJECT_NAME}-adminer
+    environment:
+      - ADMINER_DEFAULT_SERVER=${DB_HOST}
+    networks: [devnet]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.adminer.rule=Host(`${ADMINER_DOMAIN}`)"
+      - "traefik.http.routers.adminer.entrypoints=websecure"
+      - "traefik.http.routers.adminer.tls=true"
+      - "traefik.http.services.adminer.loadbalancer.server.port=8080"
+
+  node:
+    image: node:22-bullseye
+    container_name: ${COMPOSE_PROJECT_NAME}-node
+    working_dir: /workspace
+    volumes:
+      - ./:/workspace
+    command: ["bash", "-lc", "node -v && npm -v && corepack --version && tail -f /dev/null"]
+    networks: [devnet]
+
+networks:
+  devnet:
+    name: ${COMPOSE_PROJECT_NAME}-devnet

@@ -1,0 +1,28 @@
+{
+  "recommendations": [
+    "bmewburn.vscode-intelephense-client",
+    "onecentlin.laravel-blade",
+    "xdebug.php-debug",
+    "neilbrayfield.php-docblocker",
+
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "stylelint.vscode-stylelint",
+
+    "ms-azuretools.vscode-docker",
+    "redhat.vscode-yaml",
+    "editorconfig.editorconfig",
+
+    "mikestead.dotenv",
+    "ms-vscode.makefile-tools",
+
+    "bradlc.vscode-tailwindcss",
+    "csstools.postcss",
+
+    "usernamehw.errorlens",
+    "eamodio.gitlens"
+  ],
+  "unwantedRecommendations": [
+    "felixfbecker.php-debug"
+  ]
+}

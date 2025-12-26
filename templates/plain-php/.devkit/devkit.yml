@@ -1,0 +1,6 @@
+version: 1
+domain: plain.local.test
+type: php
+php: "82"
+path: projects/plain-php
+docroot: public

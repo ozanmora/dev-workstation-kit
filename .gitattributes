@@ -1,0 +1,29 @@
+# Default: use LF everywhere
+* text=auto eol=lf
+
+# Shell scripts
+*.sh text eol=lf
+
+# YAML / config
+*.yml text eol=lf
+*.yaml text eol=lf
+*.env text eol=lf
+*.example text eol=lf
+
+# Markdown
+*.md text eol=lf
+
+# Docker / Make
+Dockerfile text eol=lf
+Makefile text eol=lf
+
+# JS / JSON
+*.js text eol=lf
+*.json text eol=lf
+
+# PHP
+*.php text eol=lf
+
+# Windows scripts (istisna)
+*.ps1 text eol=crlf
+*.bat text eol=crlf

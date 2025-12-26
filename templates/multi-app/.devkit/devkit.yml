@@ -1,0 +1,26 @@
+version: 1
+
+# Multi-app config (one .devkit controlling multiple apps under a parent folder)
+apps:
+  - domain: api.local.test
+    type: php
+    php: "84"
+    path: projects/big-project/api
+    docroot: public
+
+  - domain: admin.local.test
+    type: static
+    path: projects/big-project/admin
+    docroot: dist
+
+  - domain: wp.local.test
+    type: php
+    php: "82"
+    path: projects/big-project/wordpress
+    docroot: .
+
+  - domain: legacy.local.test
+    type: php
+    php: "74"
+    path: projects/big-project/legacy
+    docroot: public

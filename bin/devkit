@@ -1,0 +1,304 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+
+cmd="${1:-help}"
+shift || true
+
+ensure_env() {
+  if [[ ! -f .env ]]; then
+    cp .env.example .env
+  fi
+}
+
+bootstrap() {
+  ensure_env
+  mkdir -p docker/certs data/mariadb projects
+
+  # Example placeholder project
+  mkdir -p projects/app/public
+  if [[ ! -f projects/app/public/index.php ]]; then
+    cat > projects/app/public/index.php <<'PHP'
+<?php
+echo "<h1>Dev Workstation Kit</h1>";
+echo "<p>This is an example project. Clone your real repos under <code>projects/</code>.</p>";
+PHP
+  fi
+
+  if [[ ! -f projects/app/.devkit/devkit.yml ]]; then
+    mkdir -p projects/app/.devkit
+    cat > projects/app/.devkit/devkit.yml <<'YAML'
+version: 1
+domain: app.local.test
+type: php
+php: "82"
+docroot: public
+YAML
+  fi
+
+  # Self-signed cert for Traefik (local.test + *.local.test)
+  local CRT="docker/certs/devkit.crt"
+  local KEY="docker/certs/devkit.key"
+  if [[ ! -f "$CRT" || ! -f "$KEY" ]]; then
+    openssl req -x509 -nodes -newkey rsa:2048 -days 3650       -keyout "$KEY" -out "$CRT"       -subj "/C=TR/ST=Izmir/L=Izmir/O=DevKit/OU=Local/CN=local.test"       -addext "subjectAltName=DNS:*.local.test,DNS:local.test"
+  fi
+
+  gen
+  up
+}
+
+gen() {
+  ensure_env
+  if command -v node >/dev/null 2>&1; then
+    node scripts/gen-nginx.mjs
+  else
+    docker compose run --rm -T node node scripts/gen-nginx.mjs
+  fi
+}
+
+up() { ensure_env; docker compose up -d --remove-orphans; }
+down() { ensure_env; docker compose down; }
+logs() { ensure_env; docker compose logs -f --tail=200; }
+ps() { ensure_env; docker compose ps; }
+
+reset() {
+  ensure_env
+  docker compose down
+  rm -rf data
+  mkdir -p data/mariadb
+  echo "[devkit] data/ wiped."
+}
+
+# ---------------------------
+# init (create .devkit/devkit.yml inside a project directory)
+# ---------------------------
+init_project() {
+  # Run this from inside the project directory (a folder under ./projects/)
+  local domain=""
+  local type="php"
+  local phpver="84"
+  local docroot=""        # if empty: depends on flags
+  local url_path="/"
+  local public_flag="false"
+  local wp_flag="false"
+  local react_flag="false"
+  local dev_port=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --domain) domain="$2"; shift 2 ;;
+      --type) type="$2"; shift 2 ;;            # php | static
+      --php) phpver="$2"; shift 2 ;;
+      --docroot) docroot="$2"; shift 2 ;;
+      --url-path|--url_path) url_path="$2"; shift 2 ;;
+      --public) public_flag="true"; shift 1 ;; # for laravel/ci4-like public docroot
+      --wordpress|--wp) wp_flag="true"; shift 1 ;;
+      --react) react_flag="true"; shift 1 ;;   # convenience alias for static
+      --dev-port|--dev_port) dev_port="$2"; shift 2 ;;
+      -h|--help)
+        cat <<'EOF'
+Usage (run inside the project directory):
+  ../../bin/devkit init --domain <dev-domain> [options]
+
+Options:
+  --type php|static           Default: php
+  --php 74|82|84|85           Default: 84 (php only)
+  --public                    Sets docroot=public (Laravel/CI4 typical)
+  --wordpress                 Sets docroot=.
+  --docroot <folder>          Explicit docroot (overrides --public/--wordpress)
+  --url-path /controlroom     Serve app under a URL prefix (default: /)
+  --react                     Shortcut for: --type static (you likely want --docroot build|dist)
+  --dev-port 5173             Store dev port metadata for domain:port usage (React dev servers)
+
+Examples:
+  ../../bin/devkit init --domain mora-works.test --public --php 84
+  ../../bin/devkit init --domain sitemialocal.com --url-path /controlroom --public --php 82
+  ../../bin/devkit init --domain react.test --type static --docroot build --dev-port 5173
+EOF
+        return 0
+        ;;
+      *)
+        echo "[devkit] Unknown init arg: $1" >&2
+        return 1
+        ;;
+    esac
+  done
+
+  if [[ -z "$domain" ]]; then
+    echo "[devkit] init requires --domain" >&2
+    return 1
+  fi
+
+  # Normalize url_path
+  if [[ -z "$url_path" ]]; then url_path="/"; fi
+  if [[ "${url_path:0:1}" != "/" ]]; then url_path="/$url_path"; fi
+  if [[ "$url_path" != "/" && "${url_path: -1}" == "/" ]]; then url_path="${url_path%/}"; fi
+
+  # Default docroot rules
+  if [[ -z "$docroot" ]]; then
+    if [[ "$wp_flag" == "true" ]]; then
+      docroot="."
+    elif [[ "$public_flag" == "true" ]]; then
+      docroot="public"
+    elif [[ "$react_flag" == "true" ]]; then
+      type="static"
+      docroot="dist"
+    else
+      # Generic php default
+      docroot="public"
+    fi
+  fi
+
+  # React convenience
+  if [[ "$react_flag" == "true" ]]; then
+    type="static"
+  fi
+
+  mkdir -p .devkit
+  local out=".devkit/devkit.yml"
+
+  {
+    echo "version: 1"
+    echo "domain: $domain"
+    if [[ "$url_path" != "/" ]]; then
+      echo "url_path: $url_path"
+    fi
+    echo "type: $type"
+    if [[ "$type" == "php" ]]; then
+      echo "php: "${phpver}""
+    fi
+    echo "docroot: $docroot"
+    if [[ -n "$dev_port" ]]; then
+      echo ""
+      echo "dev:"
+      echo "  port: ${dev_port}"
+    fi
+  } > "$out"
+
+  echo "[devkit] Wrote $out"
+  echo "[devkit] Next: run from DevKit root:"
+  echo "  ./bin/devkit gen && ./bin/devkit up"
+}
+
+# ---------------------------
+# PHP / Composer helpers
+# ---------------------------
+
+php_shell() {
+  ensure_env
+  local v="${1:-82}"
+  case "$v" in
+    74|82|84|85) docker compose exec "php$v" bash ;;
+    *) echo "Unknown PHP version: $v (use 74|82|84|85)" >&2; exit 1 ;;
+  esac
+}
+
+composer_run() {
+  ensure_env
+  local v="${1:-82}"
+  shift || true
+  if [[ "${1:-}" == "--" ]]; then shift; fi
+  case "$v" in
+    74|82|84|85) docker compose exec "php$v" composer "$@" ;;
+    *) echo "Unknown PHP version: $v (use 74|82|84|85)" >&2; exit 1 ;;
+  esac
+}
+
+# ---------------------------
+# MySQL helpers
+# ---------------------------
+
+mysql_cli() {
+  ensure_env
+  docker compose exec mariadb mysql -u"${DB_USERNAME:-app}" -p"${DB_PASSWORD:-app}" -h"${DB_HOST:-mariadb}" -P"${DB_PORT:-3306}" "${DB_DATABASE:-app}"
+}
+
+mysql_root() {
+  ensure_env
+  docker compose exec mariadb mysql -uroot -p"${DB_ROOT_PASSWORD:-root}" -h"${DB_HOST:-mariadb}" -P"${DB_PORT:-3306}"
+}
+
+mysql_dump() {
+  ensure_env
+  local out="${1:-backup.sql}"
+  docker compose exec -T mariadb mysqldump -u"${DB_USERNAME:-app}" -p"${DB_PASSWORD:-app}" -h"${DB_HOST:-mariadb}" -P"${DB_PORT:-3306}" "${DB_DATABASE:-app}" > "$out"
+  echo "[devkit] Wrote $out"
+}
+
+mysql_import() {
+  ensure_env
+  local inp="${1:-backup.sql}"
+  cat "$inp" | docker compose exec -T mariadb mysql -u"${DB_USERNAME:-app}" -p"${DB_PASSWORD:-app}" -h"${DB_HOST:-mariadb}" -P"${DB_PORT:-3306}" "${DB_DATABASE:-app}"
+  echo "[devkit] Imported $inp"
+}
+
+# ---------------------------
+# Node helpers
+# ---------------------------
+
+npm_cmd() {
+  ensure_env
+  if [[ "${1:-}" == "--" ]]; then shift; fi
+  docker compose run --rm node npm "$@"
+}
+
+yarn_cmd() {
+  ensure_env
+  docker compose run --rm node bash -lc "corepack enable >/dev/null 2>&1 || true; yarn $*"
+}
+
+case "$cmd" in
+  bootstrap) bootstrap ;;
+  gen) gen ;;
+  up) up ;;
+  down) down ;;
+  logs) logs ;;
+  ps) ps ;;
+  reset) reset ;;
+  init) init_project "$@" ;;
+  php) php_shell "$@" ;;
+  composer) composer_run "$@" ;;
+  mysql) mysql_cli ;;
+  mysql-root) mysql_root ;;
+  mysql-dump) mysql_dump "$@" ;;
+  mysql-import) mysql_import "$@" ;;
+  npm) npm_cmd "$@" ;;
+  yarn) yarn_cmd "$@" ;;
+  help|--help|-h|"")
+    cat <<'EOF'
+DevKit commands:
+  ./bin/devkit bootstrap
+  ./bin/devkit gen
+  ./bin/devkit up|down|logs|ps|reset
+
+Project config:
+  - Add .devkit/devkit.yml inside each project under ./projects/
+  - Or create it with: ./bin/devkit init --domain myapp.test --public
+
+Init:
+  ./bin/devkit init --domain mora-works.test --public --php 84
+  ./bin/devkit init --domain sitemialocal.com --url-path /controlroom --public --php 82
+  ./bin/devkit init --domain react.test --type static --docroot build --dev-port 5173
+
+PHP helpers:
+  ./bin/devkit php 82
+  ./bin/devkit composer 84 -- install -d /var/www/projects/myapp
+
+MySQL helpers:
+  ./bin/devkit mysql
+  ./bin/devkit mysql-root
+  ./bin/devkit mysql-dump backup.sql
+  ./bin/devkit mysql-import backup.sql
+
+Node helpers:
+  ./bin/devkit yarn -C projects/react-app install
+  ./bin/devkit npm -- --prefix projects/react-app run build
+EOF
+    ;;
+  *)
+    echo "Unknown command: $cmd" >&2
+    exit 1
+    ;;
+esac

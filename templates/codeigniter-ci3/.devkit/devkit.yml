@@ -1,0 +1,6 @@
+version: 1
+domain: ci3.local.test
+type: php
+php: "74"
+path: projects/ci3-app
+docroot: public   # Many CI3 apps use /public. If your CI3 uses / (root), set docroot: .

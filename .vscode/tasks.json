@@ -1,0 +1,128 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "DevKit: Bootstrap",
+      "type": "shell",
+      "command": "./bin/devkit bootstrap",
+      "problemMatcher": []
+    },
+    {
+      "label": "DevKit: Generate Nginx routes",
+      "type": "shell",
+      "command": "./bin/devkit gen",
+      "problemMatcher": []
+    },
+    {
+      "label": "DevKit: Up",
+      "type": "shell",
+      "command": "./bin/devkit up",
+      "problemMatcher": []
+    },
+    {
+      "label": "DevKit: Down",
+      "type": "shell",
+      "command": "./bin/devkit down",
+      "problemMatcher": []
+    },
+    {
+      "label": "DevKit: Logs",
+      "type": "shell",
+      "command": "./bin/devkit logs",
+      "problemMatcher": []
+    },
+    {
+      "label": "DevKit: Reset (wipe DB)",
+      "type": "shell",
+      "command": "./bin/devkit reset",
+      "problemMatcher": []
+    },
+    {
+      "label": "DevKit: Init project (.devkit)",
+      "type": "shell",
+      "command": "./bin/devkit init",
+      "args": [
+        "--domain",
+        "${input:devDomain}",
+        "--public",
+        "--php",
+        "${input:phpVersion}"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "DevKit: Init project (.devkit) with URL path prefix",
+      "type": "shell",
+      "command": "./bin/devkit init",
+      "args": [
+        "--domain",
+        "${input:devDomain}",
+        "--url-path",
+        "${input:urlPath}",
+        "--public",
+        "--php",
+        "${input:phpVersion}"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "DevKit: MySQL client",
+      "type": "shell",
+      "command": "make mysql",
+      "problemMatcher": []
+    },
+    {
+      "label": "DevKit: Yarn (args)",
+      "type": "shell",
+      "command": "make yarn",
+      "args": [
+        "ARGS=${input:yarnArgs}"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "DevKit: Npm (args)",
+      "type": "shell",
+      "command": "make npm",
+      "args": [
+        "ARGS=${input:npmArgs}"
+      ],
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "devDomain",
+      "type": "promptString",
+      "description": "Development domain (e.g. demo.local.test)"
+    },
+    {
+      "id": "urlPath",
+      "type": "promptString",
+      "description": "URL path prefix (e.g. /portal)",
+      "default": "/"
+    },
+    {
+      "id": "phpVersion",
+      "type": "pickString",
+      "description": "PHP version (for php projects)",
+      "options": [
+        "74",
+        "82",
+        "84",
+        "85"
+      ],
+      "default": "84"
+    },
+    {
+      "id": "yarnArgs",
+      "type": "promptString",
+      "description": "Yarn args (e.g. -C projects/react-app install)"
+    },
+    {
+      "id": "npmArgs",
+      "type": "promptString",
+      "description": "Npm args (e.g. -- --prefix projects/react-app run build)"
+    }
+  ]
+}

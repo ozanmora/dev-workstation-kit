@@ -1,0 +1,6 @@
+version: 1
+domain: wp.local.test
+type: php
+php: "82"
+path: projects/wordpress
+docroot: .        # WordPress docroot is usually the project root

@@ -1,0 +1,18 @@
+tls:
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /certs/devkit.crt
+        keyFile: /certs/devkit.key
+
+http:
+  middlewares:
+    redirect-to-https:
+      redirectScheme:
+        scheme: https
+        permanent: true
+
+  middlewares:
+    dashboard-enabled:
+      chain:
+        middlewares: []

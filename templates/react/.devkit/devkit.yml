@@ -1,0 +1,8 @@
+version: 1
+domain: react.local.test
+type: static
+path: projects/react-app
+docroot: dist     # or build, depending on your toolchain
+
+dev:
+  port: 5173
