@@ -52,3 +52,8 @@ You can serve an app under a URL prefix:
 ```yaml
 url_path: /portal
 ```
+
+## PHP 8.5 note
+PHP 8.5 images may be based on nightly/edge builds. Some PECL extensions (notably `redis`) may not compile yet.
+DevKit treats `pecl install redis` as **best-effort** for PHP 8.5: the container will still build and run, but the `redis` PHP extension may be unavailable.
+
