@@ -1,7 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const ROOT = path.resolve(new URL(".", import.meta.url).pathname, "..", "..");
+import { fileURLToPath } from "node:url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const ROOT = path.resolve(__dirname, "..");
 const OUT_FILE = path.join(ROOT, "docker", "nginx", "conf.d", "routes.generated.conf");
 const ENV_FILE = path.join(ROOT, ".env");
 
@@ -150,6 +154,7 @@ function routesFromDevkit(filePath) {
     php: a.php,
     path: a.path || inferProjectPath(filePath),
     docroot: a.docroot ?? (a.type === "static" ? "." : "public"),
+    dev: a.dev, // { port: 1234, host: '...' }
     source: filePath,
   });
 
@@ -204,7 +209,19 @@ if (!routes.length) {
       conf += `  # Source: ${r.source}\n`;
 
       if (urlPath === "/") {
-        if (isPHP) {
+        // Proxy to dev server if configured
+        if (r.dev && r.dev.port) {
+             const devHost = r.dev.host || "node";
+             const devPort = r.dev.port;
+             // Proxy everything to dev server
+             conf += `  location / {\n`;
+             conf += `    proxy_pass http://${devHost}:${devPort};\n`;
+             conf += `    proxy_http_version 1.1;\n`;
+             conf += `    proxy_set_header Upgrade $http_upgrade;\n`;
+             conf += `    proxy_set_header Connection "upgrade";\n`;
+             conf += `    proxy_set_header Host $host;\n`;
+             conf += `  }\n\n`;
+        } else if (isPHP) {
           conf += `  root ${fsRoot};\n  index index.php index.html;\n\n`;
           conf += `  location / { try_files $uri $uri/ /index.php?$query_string; }\n\n`;
           conf += `  location ~ \\.php$ {\n`;
@@ -244,6 +261,18 @@ if (!routes.length) {
           conf += `    try_files $uri $uri/ ${pfx}/index.html;\n`;
           conf += `  }\n\n`;
         }
+      }
+      // If dev proxy is active for a subpath? (Not standard use case but possible)
+      if (urlPath !== "/" && r.dev && r.dev.port) {
+             const devHost = r.dev.host || "node";
+             const devPort = r.dev.port;
+             conf += `  location ${urlPath}/ {\n`;
+             conf += `    proxy_pass http://${devHost}:${devPort};\n`;
+             conf += `    proxy_http_version 1.1;\n`;
+             conf += `    proxy_set_header Upgrade $http_upgrade;\n`;
+             conf += `    proxy_set_header Connection "upgrade";\n`;
+             conf += `    proxy_set_header Host $host;\n`;
+             conf += `  }\n\n`;
       }
     }
 

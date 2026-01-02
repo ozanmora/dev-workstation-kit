@@ -6,10 +6,12 @@ services:
       - "${HTTP_PORT}:80"
       - "${HTTPS_PORT}:443"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - //var/run/docker.sock:/var/run/docker.sock
       - ./docker/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
       - ./docker/traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
       - ./docker/certs:/certs:ro
+    environment:
+      - DOCKER_HOST=unix:///var/run/docker.sock
     networks: [devnet]
     labels:
       - "traefik.enable=true"
@@ -41,16 +43,15 @@ services:
     labels:
       - "traefik.enable=true"
       # Catch-all for project domains (edit if you change BASE_DOMAIN)
-      - "traefik.http.routers.projects.rule=HostRegexp(`{subdomain:[a-z0-9-]+}.local.test`) || Host(`local.test`)"
+      - "traefik.http.routers.projects.rule=HostRegexp(`{subdomain:[a-z0-9-]+}.${BASE_DOMAIN}`) || Host(`${BASE_DOMAIN}`)"
       - "traefik.http.routers.projects.entrypoints=websecure"
       - "traefik.http.routers.projects.tls=true"
       - "traefik.http.services.projects.loadbalancer.server.port=80"
 
   php74:
     build:
-      context: ./docker/php
+      context: ./docker/php/php-74
       dockerfile: Dockerfile
-      args: { PHP_VERSION: "7.4" }
     container_name: ${COMPOSE_PROJECT_NAME}-php74
     volumes:
       - ./projects:/var/www/projects
@@ -59,9 +60,8 @@ services:
 
   php82:
     build:
-      context: ./docker/php
+      context: ./docker/php/php-82
       dockerfile: Dockerfile
-      args: { PHP_VERSION: "8.2" }
     container_name: ${COMPOSE_PROJECT_NAME}-php82
     volumes:
       - ./projects:/var/www/projects
@@ -70,9 +70,8 @@ services:
 
   php84:
     build:
-      context: ./docker/php
+      context: ./docker/php/php-84
       dockerfile: Dockerfile
-      args: { PHP_VERSION: "8.4" }
     container_name: ${COMPOSE_PROJECT_NAME}-php84
     volumes:
       - ./projects:/var/www/projects
@@ -81,9 +80,8 @@ services:
 
   php85:
     build:
-      context: ./docker/php
+      context: ./docker/php/php-85
       dockerfile: Dockerfile
-      args: { PHP_VERSION: "8.5" }
     container_name: ${COMPOSE_PROJECT_NAME}-php85
     volumes:
       - ./projects:/var/www/projects

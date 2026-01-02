@@ -1,80 +1,133 @@
 # Dev Workstation Kit
 
+A powerful, containerized development environment for handling multiple projects with different stacks (PHP, Node.js, static sites) seamlessly.
 
-## Installation (important)
+Built with **Docker Compose**, **Traefik**, **Nginx**, and **dnsmasq** (optional concept).
 
-This repository is designed to be cloned **as the `devkit/` directory**.
+## Features
 
-**Correct setup:**
-```bash
-git clone git@github.com:ozanmora/dev-workstation-kit.git devkit
+- **Multi-Stack Support**:
+  - PHP 7.4, 8.2, 8.4, 8.5
+  - Node.js 22 (with npm/yarn/pnpm)
+  - MariaDB, Redis, Memcached, Mailpit
+- **Dynamic Routing**:
+  - Automatic `*.local.test` domains.
+  - Custom `BASE_DOMAIN` support for LAN access (e.g. `*.192.168.1.50.nip.io`).
+- **Live Edit Support**: Proxy to local dev servers (Vite/React/Vue) for Hot Module Replacement (HMR).
+- **SSL/TLS**: Self-signed via `mkcert` (optional) or Traefik default generated certs.
+- **Convenience**: `Makefile` and `bin/devkit` scripts for easy management.
+
+## Requirements
+
+- **Docker Desktop** (Windows/Mac/Linux)
+- **Node.js** (Only for generating config, optional if you rely on the containerized script)
+- **Make** (Optional, but recommended)
+
+## Quick Start
+
+1.  **Bootstrap**
+    ```bash
+    # Linux/Mac (or Git Bash on Windows)
+    make bootstrap
+    # OR directly:
+    ./bin/devkit bootstrap
+    ```
+
+    ```powershell
+    # Windows (CMD or PowerShell)
+    .\bin\devkit.bat bootstrap
+    ```
+    *Note: The `.bat` wrapper automatically bypasses PowerShell execution policy restrictions.*
+
+    This does 3 things:
+    - Copies `.env.example` to `.env`.
+    - Generates SSL certs in `docker/certs`.
+    - Starts containers.
+
+2.  **Add a Project**
+
+    **PHP Project (Laravel/CodeIgniter):**
+    ```bash
+    cd projects/my-laravel-app
+    # Linux/Mac
+    ../../bin/devkit init --domain app.local.test --public --php 82
+    # Windows
+    ..\..\bin\devkit.bat init --domain app.local.test --public --php 82
+    ```
+
+    **React/Vite Project:**
+    ```bash
+    cd projects/my-react-app
+    # Linux/Mac
+    ../../bin/devkit init --domain react.local.test --react --dev-port 5173
+    # Windows
+    ..\..\bin\devkit.bat init --domain react.local.test --react --dev-port 5173
+    ```
+    *Note: Using `--dev-port` creates a proxy to the running dev server in the container/host.*
+
+3.  **Apply Changes**
+    ```bash
+    # Linux/Mac
+    make gen && make up
+    # Windows
+    .\bin\devkit.bat gen
+    .\bin\devkit.bat up
+    ```
+
+4. **Visit**
+   - https://app.local.test
+   - https://react.local.test
+
+## Multi-Device / LAN Access
+
+To access your projects from other devices on the same network:
+
+1. **Find your local IP address** (e.g., `192.168.1.50`).
+2. **Update `.env`**:
+   ```ini
+   BASE_DOMAIN=192.168.1.50.nip.io
+   ```
+3. **Restart Stack**:
+   ```bash
+   make up
+   ```
+4. **Update Projects**:
+   You need to update your project domains to match the new suffix.
+   ```bash
+   # projects/app/.devkit/devkit.yml
+   domain: app.192.168.1.50.nip.io
+   ```
+   (Or run `init` again to overwrite).
+5. **Regenerate & Reload**:
+   ```bash
+   make gen
+   make up
+   ```
+   Now you can access `https://app.192.168.1.50.nip.io` from your phone or laptop on the same wifi.
+
+## Database & Tools
+
+- **MariaDB**: Port 3306 (exposed to host). User/Link: `app`/`app`. Root: `root`/`root`.
+- **Adminer**: https://adminer.local.test (or your `ADMINER_DOMAIN`).
+- **Mailpit**: https://mailpit.local.test (SMTP: 1025, Web: 8025).
+
+## Directory Structure
+
+```
+.
+├── .env                # Main configuration (Ports, Versions, Base Domain)
+├── bin/
+│   ├── devkit          # Main CLI script (Bash)
+│   └── devkit.ps1      # Main CLI script (PowerShell)
+├── docker/             # Service configurations (Nginx, PHP, Traefik)
+├── projects/           # YOUR PROJECT CODE GOES HERE
+│   └── my-app/
+│       └── .devkit/    # Project-specific config
+│           └── devkit.yml
+└── scripts/            # Helper scripts (gen-nginx.mjs)
 ```
 
-**Do NOT clone it like this:**
-```bash
-git clone git@github.com:ozanmora/dev-workstation-kit.git .
-```
+## Troubleshooting
 
-Why this matters:
-- Internal paths (`./bin/devkit`, `projects/`, `templates/`) assume the repo root **is** `devkit`
-- Makefile and VS Code tasks rely on this layout
-- Avoids Windows PowerShell path resolution issues
-
-After cloning:
-```bash
-cp .env.example .env
-./bin/devkit bootstrap
-```
-A portable local dev stack with:
-- Traefik (HTTPS edge) + internal Nginx
-- PHP-FPM: 7.4 / 8.2 / 8.4 / 8.5
-- MariaDB + Redis + Memcached
-- Mailpit + Adminer
-- Node container for npm/yarn
-
-Project routing is defined per project via:
-- `projects/<repo>/.devkit/devkit.yml`
-
----
-
-## Quick start
-
-### 1) Bootstrap
-```bash
-cp .env.example .env
-./bin/devkit bootstrap
-```
-
-### 2) Clone a project
-```bash
-cd projects
-git clone git@github.com:you/demo-app.git demo-app
-cd demo-app
-```
-
-### 3) Create `.devkit` (Laravel / CI4-style public docroot)
-```bash
-../../bin/devkit init --domain demo.local.test --public --php 84
-```
-
-### 4) Apply routing and start
-```bash
-cd ../..
-make gen
-make up
-```
-
-Open:
-- Project: `https://demo.local.test`
-- Adminer: `https://adminer.local.test`
-- Mailpit: `https://mailpit.local.test`
-
----
-
-## Documentation
-- Detailed usage: `docs/usage.md`
-- Traefik notes: `docs/traefik.md`
-- `.devkit` config reference: `docs/devkit-config.md`
-- VS Code: `docs/vscode.md`
-
-> PHP 8.5 is experimental; the `redis` PHP extension may not be available there.
+- **502 Bad Gateway**: Check if the container (php/node) is running. For React apps, ensure your dev server (`npm run dev`) is running on the correct port and host `0.0.0.0` (not localhost) if running inside docker.
+- **Certificate Errors**: Install the root CA generated in `docker/certs` or generated by `mkcert` to your system trust store.

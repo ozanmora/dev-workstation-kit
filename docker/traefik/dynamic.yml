@@ -12,7 +12,6 @@ http:
         scheme: https
         permanent: true
 
-  middlewares:
     dashboard-enabled:
       chain:
         middlewares: []
