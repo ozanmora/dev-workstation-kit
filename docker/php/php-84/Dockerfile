@@ -12,7 +12,8 @@ RUN install-php-extensions \
     opcache \
     pdo_mysql \
     zip \
-    redis
+    redis \
+    memcached
 
 # Common system tools
 RUN apt-get update && apt-get install -y --no-install-recommends \

@@ -6,6 +6,64 @@ tls:
         keyFile: /certs/devkit.key
 
 http:
+  routers:
+    # Redirect HTTP -> HTTPS
+    # http-catchall:
+    #   entryPoints: ["web"]
+    #   rule: "HostRegexp(`{host:.+}`)"
+    #   middlewares: ["redirect-to-https"]
+    #   service: "noop@internal" # Dummy service
+
+    # Dashboard
+    # Dashboard
+    traefik:
+      entryPoints: ["web"]
+      rule: "Host(`traefik.local.test`) || Host(`traefik.localhost`)"
+      priority: 10
+      service: "api@internal"
+      # tls: {} # Disabled for HTTP debugging
+      middlewares: ["dashboard-enabled"]
+
+    # Adminer
+    adminer:
+      entryPoints: ["web"]
+      rule: "Host(`adminer.local.test`) || Host(`adminer.localhost`)"
+      priority: 10
+      service: "adminer"
+      # tls: {} # Disabled for HTTP debugging
+
+    # Mailpit
+    mailpit:
+      entryPoints: ["web"]
+      rule: "Host(`mailpit.local.test`) || Host(`mailpit.localhost`)"
+      priority: 10
+      service: "mailpit"
+      # tls: {} # Disabled for HTTP debugging
+
+    # Projects (Nginx)
+    projects:
+      entryPoints: ["web"]
+      rule: "HostRegexp(`^.+\\.local\\.test$`) || Host(`local.test`) || Host(`localhost`)"
+      priority: 1
+      service: "nginx"
+      # tls: {} # Disabled for HTTP debugging
+
+  services:
+    adminer:
+      loadBalancer:
+        servers:
+          - url: "http://adminer:8080"
+
+    mailpit:
+      loadBalancer:
+        servers:
+          - url: "http://mailpit:8025"
+
+    nginx:
+      loadBalancer:
+        servers:
+          - url: "http://nginx:80"
+
   middlewares:
     redirect-to-https:
       redirectScheme:

@@ -59,6 +59,7 @@ gen() {
 }
 
 up() { ensure_env; docker compose up -d --remove-orphans; }
+build() { ensure_env; docker compose build --no-cache; }
 down() { ensure_env; docker compose down; }
 logs() { ensure_env; docker compose logs -f --tail=200; }
 ps() { ensure_env; docker compose ps; }
@@ -253,6 +254,7 @@ case "$cmd" in
   bootstrap) bootstrap ;;
   gen) gen ;;
   up) up ;;
+  build) build ;;
   down) down ;;
   logs) logs ;;
   ps) ps ;;
@@ -271,7 +273,7 @@ case "$cmd" in
 DevKit commands:
   ./bin/devkit bootstrap
   ./bin/devkit gen
-  ./bin/devkit up|down|logs|ps|reset
+  ./bin/devkit up|down|build|logs|ps|reset
 
 Project config:
   - Add .devkit/devkit.yml inside each project under ./projects/

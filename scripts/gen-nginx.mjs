@@ -174,10 +174,10 @@ for (const f of devkitFiles) routes = routes.concat(routesFromDevkit(f));
 routes.sort((a, b) => (a.domain + a.url_path).localeCompare(b.domain + b.url_path));
 
 let conf = `# AUTO-GENERATED. DO NOT EDIT.\n# Sources: projects/**/.devkit/devkit.yml\n\n`;
-conf += `upstream php74 { server ${phpUpstream["74"]}; }\n`;
-conf += `upstream php82 { server ${phpUpstream["82"]}; }\n`;
-conf += `upstream php84 { server ${phpUpstream["84"]}; }\n`;
-conf += `upstream php85 { server ${phpUpstream["85"]}; }\n\n`;
+conf += `upstream backend_php74 { server ${phpUpstream["74"]}; }\n`;
+conf += `upstream backend_php82 { server ${phpUpstream["82"]}; }\n`;
+conf += `upstream backend_php84 { server ${phpUpstream["84"]}; }\n`;
+conf += `upstream backend_php85 { server ${phpUpstream["85"]}; }\n\n`;
 
 if (!routes.length) {
   conf += `# No routes found. Add: projects/<name>/.devkit/devkit.yml\n`;
@@ -197,7 +197,7 @@ if (!routes.length) {
     for (const r of items) {
       const isPHP = r.type === "php";
       const phpVer = (r.php || DEFAULT_PHP).replace(/[^0-9]/g, "");
-      const upstreamName = `php${phpUpstream[phpVer] ? phpVer : DEFAULT_PHP}`;
+      const upstreamName = `backend_php${phpUpstream[phpVer] ? phpVer : DEFAULT_PHP}`;
 
       const projPath = normalizePath(r.path).replace(/^projects\//, "");
       const docroot = normalizePath(r.docroot || (isPHP ? "public" : "."));

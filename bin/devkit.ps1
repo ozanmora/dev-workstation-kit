@@ -55,6 +55,7 @@ phpinfo();
 
   "gen" { Gen }
   "up" { Ensure-Env; docker compose up -d --remove-orphans }
+  "build" { Ensure-Env; docker compose build --no-cache }
   "down" { Ensure-Env; docker compose down }
   "logs" { Ensure-Env; docker compose logs -f --tail=200 }
   "ps" { Ensure-Env; docker compose ps }
@@ -144,7 +145,7 @@ phpinfo();
 DevKit commands:
   .\bin\devkit.ps1 bootstrap
   .\bin\devkit.ps1 gen
-  .\bin\devkit.ps1 up|down|logs|ps|reset
+  .\bin\devkit.ps1 up|down|build|logs|ps|reset
 
 Node helpers:
   .\bin\devkit.ps1 npm  -- <npm args>
