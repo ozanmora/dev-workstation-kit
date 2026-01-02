@@ -12,122 +12,90 @@ Built with **Docker Compose**, **Traefik**, **Nginx**, and **dnsmasq** (optional
   - MariaDB, Redis, Memcached, Mailpit
 - **Dynamic Routing**:
   - Automatic `*.local.test` domains.
-  - Custom `BASE_DOMAIN` support for LAN access (e.g. `*.192.168.1.50.nip.io`).
+  - Custom `BASE_DOMAIN` support via `.env` (e.g., `*.192.168.1.50.nip.io`).
+  - **Auto-generated** Traefik and Nginx configurations.
+- **Environment Injection**:
+  - `DB_HOST`, `DB_PASSWORD`, etc., from `.env` are automatically available in all PHP containers.
 - **Live Edit Support**: Proxy to local dev servers (Vite/React/Vue) for Hot Module Replacement (HMR).
 - **SSL/TLS**: Self-signed via `mkcert` (optional) or Traefik default generated certs.
-- **Convenience**: `Makefile` and `bin/devkit` scripts for easy management.
+- **Convenience**: `bin/devkit` scripts for easy management.
 
 ## Requirements
 
 - **Docker Desktop** (Windows/Mac/Linux)
-- **Node.js** (Only for generating config, optional if you rely on the containerized script)
-- **Make** (Optional, but recommended)
+- **Node.js** (Only for generating config, optional if using the containerized script)
 
 ## Quick Start
 
 1.  **Bootstrap**
-    ```bash
-    # Linux/Mac (or Git Bash on Windows)
-    make bootstrap
-    # OR directly:
-    ./bin/devkit bootstrap
-    ```
-
     ```powershell
-    # Windows (CMD or PowerShell)
+    # Windows
     .\bin\devkit.bat bootstrap
     ```
-    *Note: The `.bat` wrapper automatically bypasses PowerShell execution policy restrictions.*
-
-    This does 3 things:
-    - Copies `.env.example` to `.env`.
-    - Generates SSL certs in `docker/certs`.
-    - Starts containers.
+    ```bash
+    # Linux/Mac
+    ./bin/devkit bootstrap
+    ```
+    This copies `.env.example` to `.env` and starts containers.
 
 2.  **Add a Project**
 
-    **PHP Project (Laravel/CodeIgniter):**
-    ```bash
-    cd projects/my-laravel-app
-    # Linux/Mac
-    ../../bin/devkit init --domain app.local.test --public --php 82
-    # Windows
-    ..\..\bin\devkit.bat init --domain app.local.test --public --php 82
+    **PHP Project:**
+    ```powershell
+    cd projects/my-app
+    ..\..\bin\devkit.bat init --domain app.local.test --public --php 84
     ```
 
     **React/Vite Project:**
-    ```bash
-    cd projects/my-react-app
-    # Linux/Mac
-    ../../bin/devkit init --domain react.local.test --react --dev-port 5173
-    # Windows
+    ```powershell
+    cd projects/my-react
     ..\..\bin\devkit.bat init --domain react.local.test --react --dev-port 5173
     ```
-    *Note: Using `--dev-port` creates a proxy to the running dev server in the container/host.*
 
-3.  **Apply Changes**
-    ```bash
-    # Linux/Mac
-    make gen && make up
-    # Windows
+3.  **Apply Changes (Generate Configs)**
+    **Crucial Step:** Whenever you add a project or change `.env` domains, you must run `gen`:
+    ```powershell
     .\bin\devkit.bat gen
     .\bin\devkit.bat up
     ```
+    *`gen` auto-updates `docker/traefik/dynamic.yml` and `docker/nginx/conf.d/*.conf`.*
 
-4. **Visit**
-   - https://app.local.test
-   - https://react.local.test
+4.  **Visit**
+    - https://app.local.test
+    - https://traefik.local.test (Dashboard)
+    - https://adminer.local.test (Database)
+    - https://mailpit.local.test (Email)
+
+## Configuration (.env)
+
+Customize your environment in `.env`. Key variables:
+
+- `COMPOSE_PROJECT_NAME`: Names your containers (e.g., `myproj` -> `myproj-php84`).
+- `BASE_DOMAIN`: The wildcard suffix (default: `local.test`).
+- `TRAEFIK_ENABLE_DASHBOARD`: Set `false` to disable the dashboard route.
+- `TRAEFIK_DASHBOARD_DOMAIN`, `ADMINER_DOMAIN`, `MAILPIT_DOMAIN`: Custom domains for tools.
+- `DB_*`: Database credentials (automatically passed to PHP containers).
 
 ## Multi-Device / LAN Access
 
-To access your projects from other devices on the same network:
-
-1. **Find your local IP address** (e.g., `192.168.1.50`).
-2. **Update `.env`**:
-   ```ini
-   BASE_DOMAIN=192.168.1.50.nip.io
-   ```
-3. **Restart Stack**:
-   ```bash
-   make up
-   ```
-4. **Update Projects**:
-   You need to update your project domains to match the new suffix.
-   ```bash
-   # projects/app/.devkit/devkit.yml
-   domain: app.192.168.1.50.nip.io
-   ```
-   (Or run `init` again to overwrite).
-5. **Regenerate & Reload**:
-   ```bash
-   make gen
-   make up
-   ```
-   Now you can access `https://app.192.168.1.50.nip.io` from your phone or laptop on the same wifi.
-
-## Database & Tools
-
-- **MariaDB**: Port 3306 (exposed to host). User/Link: `app`/`app`. Root: `root`/`root`.
-- **Adminer**: https://adminer.local.test (or your `ADMINER_DOMAIN`).
-- **Mailpit**: https://mailpit.local.test (SMTP: 1025, Web: 8025).
+1.  **Update `.env`**: `BASE_DOMAIN=192.168.1.x.nip.io`
+2.  **Update Projects**: Update `domain:` in `projects/*/.devkit/devkit.yml`.
+3.  **Apply**:
+    ```powershell
+    .\bin\devkit.bat gen
+    .\bin\devkit.bat up
+    ```
 
 ## Directory Structure
 
 ```
 .
-├── .env                # Main configuration (Ports, Versions, Base Domain)
-├── bin/
-│   ├── devkit          # Main CLI script (Bash)
-│   └── devkit.ps1      # Main CLI script (PowerShell)
-├── docker/             # Service configurations (Nginx, PHP, Traefik)
-├── projects/           # YOUR PROJECT CODE GOES HERE
-│   └── my-app/
-│       └── .devkit/    # Project-specific config
-│           └── devkit.yml
-└── scripts/            # Helper scripts (gen-nginx.mjs)
+├── .env                # Main config
+├── bin/                # CLI scripts
+├── docker/             # Docker config
+│   ├── nginx/conf.d/   # AUTO-GENERATED config files
+│   ├── traefik/
+│   │   └── dynamic.yml # AUTO-GENERATED routing rules
+├── projects/           # Your Code
+└── scripts/            # Generator logic (gen-nginx.mjs)
 ```
-
-## Troubleshooting
-
-- **502 Bad Gateway**: Check if the container (php/node) is running. For React apps, ensure your dev server (`npm run dev`) is running on the correct port and host `0.0.0.0` (not localhost) if running inside docker.
-- **Certificate Errors**: Install the root CA generated in `docker/certs` or generated by `mkcert` to your system trust store.
