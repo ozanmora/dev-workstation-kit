@@ -173,16 +173,26 @@ let routes = [];
 for (const f of devkitFiles) routes = routes.concat(routesFromDevkit(f));
 routes.sort((a, b) => (a.domain + a.url_path).localeCompare(b.domain + b.url_path));
 
-let conf = `# AUTO-GENERATED. DO NOT EDIT.\n# Sources: projects/**/.devkit/devkit.yml\n\n`;
-conf += `upstream backend_php74 { server ${phpUpstream["74"]}; }\n`;
-conf += `upstream backend_php82 { server ${phpUpstream["82"]}; }\n`;
-conf += `upstream backend_php84 { server ${phpUpstream["84"]}; }\n`;
-conf += `upstream backend_php85 { server ${phpUpstream["85"]}; }\n\n`;
+// 1. Generate Upstreams
+const UPSTREAM_FILE = path.join(ROOT, "docker", "nginx", "conf.d", "001-upstreams.conf");
+let upstreamConf = `# AUTO-GENERATED - Shared Upstreams\n`;
+upstreamConf += `upstream backend_php74 { server ${phpUpstream["74"]}; }\n`;
+upstreamConf += `upstream backend_php82 { server ${phpUpstream["82"]}; }\n`;
+upstreamConf += `upstream backend_php84 { server ${phpUpstream["84"]}; }\n`;
+upstreamConf += `upstream backend_php85 { server ${phpUpstream["85"]}; }\n`;
+fs.writeFileSync(UPSTREAM_FILE, upstreamConf, "utf8");
+console.log(`[devkit] Generated: ${path.relative(ROOT, UPSTREAM_FILE)}`);
+
+// 2. Generate per-domain config
+const confDir = path.join(ROOT, "docker", "nginx", "conf.d");
+// Cleanup old generated routes file if exists
+const oldFile = path.join(confDir, "routes.generated.conf");
+if (fs.existsSync(oldFile)) fs.unlinkSync(oldFile);
 
 if (!routes.length) {
-  conf += `# No routes found. Add: projects/<name>/.devkit/devkit.yml\n`;
+  console.log(`[devkit] No routes found.`);
 } else {
-  // group by domain into one server block per domain (support multiple url_path entries)
+  // group by domain
   const byDomain = new Map();
   for (const r of routes) {
     if (!byDomain.has(r.domain)) byDomain.set(r.domain, []);
@@ -190,98 +200,177 @@ if (!routes.length) {
   }
 
   for (const [domain, items] of byDomain.entries()) {
+    let conf = `# AUTO-GENERATED for ${domain}\n\n`;
     conf += `server {\n`;
     conf += `  listen 80;\n`;
     conf += `  server_name ${domain};\n\n`;
 
     for (const r of items) {
-      const isPHP = r.type === "php";
-      const phpVer = (r.php || DEFAULT_PHP).replace(/[^0-9]/g, "");
-      const upstreamName = `backend_php${phpUpstream[phpVer] ? phpVer : DEFAULT_PHP}`;
+       // ... (same logic as before for location blocks) ...
+       const isPHP = r.type === "php";
+       const phpVer = (r.php || DEFAULT_PHP).replace(/[^0-9]/g, "");
+       const upstreamName = `backend_php${phpUpstream[phpVer] ? phpVer : DEFAULT_PHP}`;
 
-      const projPath = normalizePath(r.path).replace(/^projects\//, "");
-      const docroot = normalizePath(r.docroot || (isPHP ? "public" : "."));
-      const baseRoot = `/var/www/projects/${projPath}`;
-      const fsRoot = path.posix.join(baseRoot, docroot === "." ? "" : docroot);
+       const projPath = normalizePath(r.path).replace(/^projects\//, "");
+       const docroot = normalizePath(r.docroot || (isPHP ? "public" : "."));
+       const baseRoot = `/var/www/projects/${projPath}`;
+       const fsRoot = path.posix.join(baseRoot, docroot === "." ? "" : docroot);
 
-      const urlPath = normalizeUrlPath(r.url_path);
+       const urlPath = normalizeUrlPath(r.url_path);
 
-      conf += `  # Source: ${r.source}\n`;
+       conf += `  # Source: ${r.source}\n`;
 
-      if (urlPath === "/") {
-        // Proxy to dev server if configured
-        if (r.dev && r.dev.port) {
-             const devHost = r.dev.host || "node";
-             const devPort = r.dev.port;
-             // Proxy everything to dev server
-             conf += `  location / {\n`;
-             conf += `    proxy_pass http://${devHost}:${devPort};\n`;
-             conf += `    proxy_http_version 1.1;\n`;
-             conf += `    proxy_set_header Upgrade $http_upgrade;\n`;
-             conf += `    proxy_set_header Connection "upgrade";\n`;
-             conf += `    proxy_set_header Host $host;\n`;
-             conf += `  }\n\n`;
-        } else if (isPHP) {
-          conf += `  root ${fsRoot};\n  index index.php index.html;\n\n`;
-          conf += `  location / { try_files $uri $uri/ /index.php?$query_string; }\n\n`;
-          conf += `  location ~ \\.php$ {\n`;
-          conf += `    include fastcgi_params;\n`;
-          conf += `    fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;\n`;
-          conf += `    fastcgi_param PHP_VALUE "display_errors=1 \\n error_reporting=E_ALL";\n`;
-          conf += `    fastcgi_pass ${upstreamName};\n`;
-          conf += `  }\n\n`;
-        } else {
-          conf += `  root ${fsRoot};\n  index index.html;\n\n`;
-          conf += `  location / { try_files $uri $uri/ /index.html; }\n\n`;
-        }
-      } else {
-        // Path-prefix routing using alias so URL does NOT include docroot
-        // Example: url_path=/controlroom, docroot=public -> /controlroom/* maps to .../controlroom/public/*
-        const aliasRoot = fsRoot; // directory that contains index.php or index.html
-        const pfx = urlPath;
+       if (urlPath === "/") {
+         // Proxy to dev server if configured
+         if (r.dev && r.dev.port) {
+              const devHost = r.dev.host || "node";
+              const devPort = r.dev.port;
+              // Proxy everything to dev server
+              conf += `  location / {\n`;
+              conf += `    proxy_pass http://${devHost}:${devPort};\n`;
+              conf += `    proxy_http_version 1.1;\n`;
+              conf += `    proxy_set_header Upgrade $http_upgrade;\n`;
+              conf += `    proxy_set_header Connection "upgrade";\n`;
+              conf += `    proxy_set_header Host $host;\n`;
+              conf += `  }\n\n`;
+         } else if (isPHP) {
+           conf += `  root ${fsRoot};\n  index index.php index.html;\n\n`;
+           conf += `  location / { try_files $uri $uri/ /index.php?$query_string; }\n\n`;
+           conf += `  location ~ \\.php$ {\n`;
+           conf += `    include fastcgi_params;\n`;
+           conf += `    fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;\n`;
+           conf += `    fastcgi_param PHP_VALUE "display_errors=1 \\n error_reporting=E_ALL";\n`;
+           conf += `    fastcgi_pass ${upstreamName};\n`;
+           conf += `  }\n\n`;
+         } else {
+           conf += `  root ${fsRoot};\n  index index.html;\n\n`;
+           conf += `  location / { try_files $uri $uri/ /index.html; }\n\n`;
+         }
+       } else {
+         const aliasRoot = fsRoot;
+         const pfx = urlPath;
 
-        if (isPHP) {
-          conf += `  location ^~ ${pfx}/ {\n`;
-          conf += `    alias ${aliasRoot}/;\n`;
-          conf += `    index index.php index.html;\n`;
-          conf += `    try_files $uri $uri/ ${pfx}/index.php?$query_string;\n`;
-          conf += `  }\n\n`;
+         if (isPHP) {
+           conf += `  location ^~ ${pfx}/ {\n`;
+           conf += `    alias ${aliasRoot}/;\n`;
+           conf += `    index index.php index.html;\n`;
+           conf += `    try_files $uri $uri/ ${pfx}/index.php?$query_string;\n`;
+           conf += `  }\n\n`;
 
-          conf += `  location ~ ^${pfx}/(.+\\.php)$ {\n`;
-          conf += `    alias ${aliasRoot}/$1;\n`;
-          conf += `    include fastcgi_params;\n`;
-          conf += `    fastcgi_param SCRIPT_FILENAME $request_filename;\n`;
-          conf += `    fastcgi_param PHP_VALUE "display_errors=1 \\n error_reporting=E_ALL";\n`;
-          conf += `    fastcgi_pass ${upstreamName};\n`;
-          conf += `  }\n\n`;
-        } else {
-          conf += `  location ^~ ${pfx}/ {\n`;
-          conf += `    alias ${aliasRoot}/;\n`;
-          conf += `    index index.html;\n`;
-          conf += `    try_files $uri $uri/ ${pfx}/index.html;\n`;
-          conf += `  }\n\n`;
-        }
-      }
-      // If dev proxy is active for a subpath? (Not standard use case but possible)
-      if (urlPath !== "/" && r.dev && r.dev.port) {
-             const devHost = r.dev.host || "node";
-             const devPort = r.dev.port;
-             conf += `  location ${urlPath}/ {\n`;
-             conf += `    proxy_pass http://${devHost}:${devPort};\n`;
-             conf += `    proxy_http_version 1.1;\n`;
-             conf += `    proxy_set_header Upgrade $http_upgrade;\n`;
-             conf += `    proxy_set_header Connection "upgrade";\n`;
-             conf += `    proxy_set_header Host $host;\n`;
-             conf += `  }\n\n`;
-      }
+           conf += `  location ~ ^${pfx}/(.+\\.php)$ {\n`;
+           conf += `    alias ${aliasRoot}/$1;\n`;
+           conf += `    include fastcgi_params;\n`;
+           conf += `    fastcgi_param SCRIPT_FILENAME $request_filename;\n`;
+           conf += `    fastcgi_param PHP_VALUE "display_errors=1 \\n error_reporting=E_ALL";\n`;
+           conf += `    fastcgi_pass ${upstreamName};\n`;
+           conf += `  }\n\n`;
+         } else {
+           conf += `  location ^~ ${pfx}/ {\n`;
+           conf += `    alias ${aliasRoot}/;\n`;
+           conf += `    index index.html;\n`;
+           conf += `    try_files $uri $uri/ ${pfx}/index.html;\n`;
+           conf += `  }\n\n`;
+         }
+       }
+
+       if (urlPath !== "/" && r.dev && r.dev.port) {
+              const devHost = r.dev.host || "node";
+              const devPort = r.dev.port;
+              conf += `  location ${urlPath}/ {\n`;
+              conf += `    proxy_pass http://${devHost}:${devPort};\n`;
+              conf += `    proxy_http_version 1.1;\n`;
+              conf += `    proxy_set_header Upgrade $http_upgrade;\n`;
+              conf += `    proxy_set_header Connection "upgrade";\n`;
+              conf += `    proxy_set_header Host $host;\n`;
+              conf += `  }\n\n`;
+       }
     }
 
     conf += `}\n\n`;
+    const outFile = path.join(confDir, `${domain}.conf`);
+    fs.writeFileSync(outFile, conf, "utf8");
+    console.log(`[devkit] Generated: ${path.relative(ROOT, outFile)}`);
   }
 }
-
-fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
-fs.writeFileSync(OUT_FILE, conf, "utf8");
-console.log(`[devkit] Generated: ${path.relative(ROOT, OUT_FILE)}`);
 console.log(`[devkit] Domains: ${new Set(routes.map(r => r.domain)).size}`);
 console.log(`[devkit] Routes: ${routes.length}`);
+
+// Update Traefik dynamic.yml
+// Generate Traefik dynamic.yml
+const TRAEFIK_DYNAMIC_FILE = path.join(ROOT, "docker", "traefik", "dynamic.yml");
+
+const traefikDomain = env.TRAEFIK_DASHBOARD_DOMAIN || "traefik.local.test";
+const adminerDomain = env.ADMINER_DOMAIN || "adminer.local.test";
+const mailpitDomain = env.MAILPIT_DOMAIN || "mailpit.local.test";
+const dashboardEnabled = env.TRAEFIK_ENABLE_DASHBOARD === "true";
+const baseRaw = env.BASE_DOMAIN || "local.test";
+const baseDomainRegex = baseRaw.replace(/\./g, "\\\\.");
+
+const traefikRule = dashboardEnabled
+  ? `Host(\`${traefikDomain}\`) || Host(\`traefik.localhost\`)`
+  : `Host(\`disabled.traefik.localhost\`)`;
+
+const dynamicYmlContent = `tls:
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /certs/devkit.crt
+        keyFile: /certs/devkit.key
+
+http:
+  routers:
+    # Traefik Dashboard
+    traefik:
+      entryPoints: ["web"]
+      rule: "${traefikRule}"
+      priority: 10
+      service: "api@internal"
+      middlewares: ["dashboard-enabled"]
+
+    # Adminer
+    adminer:
+      entryPoints: ["web"]
+      rule: "Host(\`${adminerDomain}\`) || Host(\`adminer.localhost\`)"
+      priority: 10
+      service: "adminer"
+
+    # Mailpit
+    mailpit:
+      entryPoints: ["web"]
+      rule: "Host(\`${mailpitDomain}\`) || Host(\`mailpit.localhost\`)"
+      priority: 10
+      service: "mailpit"
+
+    # Projects (Nginx)
+    projects:
+      entryPoints: ["web"]
+      rule: "HostRegexp(\`^.+\\\\.${baseDomainRegex}$\`) || Host(\`${baseRaw}\`) || Host(\`localhost\`)"
+      priority: 1
+      service: "nginx"
+
+  services:
+    adminer:
+      loadBalancer:
+        servers:
+          - url: "http://adminer:8080"
+    mailpit:
+      loadBalancer:
+        servers:
+          - url: "http://mailpit:8025"
+    nginx:
+      loadBalancer:
+        servers:
+          - url: "http://nginx:80"
+
+  middlewares:
+    redirect-to-https:
+      redirectScheme:
+        scheme: https
+        permanent: true
+    dashboard-enabled:
+      chain:
+        middlewares: []
+`;
+
+fs.writeFileSync(TRAEFIK_DYNAMIC_FILE, dynamicYmlContent, "utf8");
+console.log(`[devkit] Generated: ${path.relative(ROOT, TRAEFIK_DYNAMIC_FILE)}`);

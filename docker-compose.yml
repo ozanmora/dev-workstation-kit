@@ -1,7 +1,7 @@
 services:
   traefik:
     image: traefik:v3.1
-    container_name: devkit-traefik
+    container_name: ${COMPOSE_PROJECT_NAME}-traefik
     ports:
       - "80:80"
       - "443:443"
@@ -29,6 +29,13 @@ services:
     volumes:
       - ./html:/var/www/html
       - ./projects:/var/www/projects
+    environment:
+      - DB_HOST=${DB_HOST}
+      - DB_DATABASE=${DB_DATABASE}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - MEMCACHED_PORT=${MEMCACHED_PORT:-11211}
     networks: [devnet]
 
   php74:
@@ -39,6 +46,13 @@ services:
     volumes:
       - ./html:/var/www/html
       - ./projects:/var/www/projects
+    environment:
+      - DB_HOST=${DB_HOST}
+      - DB_DATABASE=${DB_DATABASE}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - MEMCACHED_PORT=${MEMCACHED_PORT:-11211}
     networks: [devnet]
 
   php85:
@@ -49,6 +63,13 @@ services:
     volumes:
       - ./html:/var/www/html
       - ./projects:/var/www/projects
+    environment:
+      - DB_HOST=${DB_HOST}
+      - DB_DATABASE=${DB_DATABASE}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - MEMCACHED_PORT=${MEMCACHED_PORT:-11211}
     networks: [devnet]
 
   node:

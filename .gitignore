@@ -27,3 +27,8 @@ projects/*
 
 # Data
 data/
+
+# Generated Configuration
+docker/nginx/conf.d/*.conf
+!docker/nginx/conf.d/000-default.conf
+docker/traefik/dynamic.yml
